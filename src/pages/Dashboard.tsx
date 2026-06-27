@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatCurrency } from '../lib/utils'
-import { TrendingUp, ShoppingCart, DollarSign, Zap, Wallet, CreditCard } from 'lucide-react'
+import { ShoppingCart, DollarSign, Zap, Wallet, CreditCard } from 'lucide-react'
 import StatCard from '../components/StatCard'
 import RecentOrders from '../components/RecentOrders'
 import TopItemsChart from '../components/TopItemsChart'
@@ -217,14 +217,6 @@ export default function Dashboard() {
           icon={Zap}
           color="bg-purple-100"
           textColor="text-purple-600"
-          loading={loading}
-        />
-        <StatCard
-          title="Growth"
-          value="↑ 12%"
-          icon={TrendingUp}
-          color="bg-orange-100"
-          textColor="text-orange-600"
           loading={loading}
         />
       </div>
