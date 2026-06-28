@@ -36,7 +36,9 @@ export default function Layout({ children }: LayoutProps) {
           <div className="flex items-center justify-between">
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="Kopay" className="w-10 h-10 rounded-lg" />
+              <div className="w-10 h-10 bg-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                <span className="text-white font-bold text-lg">K</span>
+              </div>
               <span className="font-bold text-lg tracking-tight">Kopay</span>
               <span className="text-amber-300 text-xs font-medium">owner</span>
             </div>
