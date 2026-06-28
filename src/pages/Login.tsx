@@ -33,9 +33,7 @@ export default function Login() {
     <div className="min-h-screen bg-gradient-to-br from-primary-800 to-primary-700 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-lg shadow-xl p-8">
         <div className="flex justify-center mb-6">
-          <div className="w-16 h-16 bg-amber-500 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-3xl">K</span>
-          </div>
+          <img src="/logo.png" alt="Kopay" className="w-16 h-16 rounded-lg" />
         </div>
 
         <h1 className="text-2xl font-bold text-center text-gray-900 mb-2">
