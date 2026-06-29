@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { X, Edit2, Trash2, Check } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, Edit2, Trash2 } from 'lucide-react'
 import { formatCurrency, formatDate } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 import type { Order } from '../types'
@@ -19,15 +19,34 @@ export default function OrderDetailModal({
 }: OrderDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({
-    customer_name: order?.customer_name || '',
-    notes: order?.notes || '',
-    payment_method: order?.payment_method || 'tunai',
+    customer_name: '',
+    notes: '',
+    payment_method: 'tunai',
+    status: 'pending',
   })
   const [isDeleting, setIsDeleting] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Initialize form when order changes
+  useEffect(() => {
+    if (order) {
+      setEditForm({
+        customer_name: order.customer_name || '',
+        notes: order.notes || '',
+        payment_method: order.payment_method || 'tunai',
+        status: order.status || 'pending',
+      })
+      setIsEditing(false)
+    }
+  }, [order])
+
   if (!isOpen || !order) return null
+
+  // Calculate total from order_items
+  const total = order.order_items?.reduce((sum, item) => {
+    return sum + ((item.price || 0) * (item.quantity || 0))
+  }, 0) || 0
 
   const handleSave = async () => {
     try {
@@ -40,6 +59,8 @@ export default function OrderDetailModal({
           customer_name: editForm.customer_name,
           notes: editForm.notes,
           payment_method: editForm.payment_method,
+          status: editForm.status,
+          total_price: total,
         })
         .eq('id', order.id)
 
@@ -84,31 +105,13 @@ export default function OrderDetailModal({
     }
   }
 
-  const handleChangePayment = async (newMethod: string) => {
-    try {
-      setError(null)
-
-      const { error: updateError } = await supabase
-        .from('orders')
-        .update({ payment_method: newMethod })
-        .eq('id', order.id)
-
-      if (updateError) throw updateError
-
-      editForm.payment_method = newMethod
-      onUpdate()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal mengubah metode pembayaran')
-    }
-  }
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-96 overflow-y-auto shadow-xl">
         {/* Header */}
         <div className="sticky top-0 bg-gradient-to-r from-primary-800 to-primary-700 text-white p-6 flex justify-between items-center">
           <div>
-            <h2 className="text-2xl font-bold">Order #{order.order_number}</h2>
+            <h2 className="text-2xl font-bold">Order #{order.id}</h2>
             <p className="text-primary-100 text-sm">{formatDate(order.created_at)}</p>
           </div>
           <button
@@ -217,12 +220,12 @@ export default function OrderDetailModal({
             </div>
           </div>
 
-          {/* Payment & Total */}
+          {/* Payment & Status & Total */}
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900">Pembayaran</h3>
-            <div className="grid grid-cols-2 gap-4">
+            <h3 className="font-semibold text-gray-900">Pembayaran & Status</h3>
+            <div className="grid grid-cols-3 gap-4">
               <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">Metode</p>
+                <p className="text-sm text-gray-600 mb-2">Metode</p>
                 {isEditing ? (
                   <select
                     value={editForm.payment_method}
@@ -236,27 +239,31 @@ export default function OrderDetailModal({
                   </select>
                 ) : (
                   <p className="font-medium text-gray-900 capitalize">
-                    {order.payment_method || 'Tunai'}
+                    {editForm.payment_method}
                   </p>
+                )}
+              </div>
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <p className="text-sm text-blue-600 mb-2">Status</p>
+                {isEditing ? (
+                  <select
+                    value={editForm.status}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, status: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 outline-none text-sm"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                ) : (
+                  <p className="font-medium text-blue-900 capitalize">{editForm.status}</p>
                 )}
               </div>
               <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
                 <p className="text-sm text-green-600 mb-1">Total</p>
-                <p className="font-bold text-xl text-green-900">
-                  {formatCurrency(order.total_amount || 0)}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Status Badge */}
-          <div className="space-y-2">
-            <h3 className="font-semibold text-gray-900">Status</h3>
-            <div className="flex items-center gap-2">
-              <div className="px-4 py-2 rounded-full bg-green-100">
-                <p className="text-sm font-medium text-green-700 flex items-center gap-2">
-                  <Check size={16} /> {order.payment_status || 'pending'}
-                </p>
+                <p className="font-bold text-xl text-green-900">{formatCurrency(total)}</p>
               </div>
             </div>
           </div>
@@ -301,26 +308,6 @@ export default function OrderDetailModal({
               </>
             )}
           </div>
-
-          {/* Additional Actions */}
-          {!isEditing && (
-            <div className="flex gap-3 pt-2 border-t">
-              <button
-                onClick={() => handleChangePayment('tunai')}
-                disabled={order.payment_method === 'tunai'}
-                className="flex-1 px-4 py-2 bg-amber-100 text-amber-700 hover:bg-amber-200 rounded-lg font-medium transition disabled:opacity-50 text-sm"
-              >
-                Ubah ke Tunai
-              </button>
-              <button
-                onClick={() => handleChangePayment('qris')}
-                disabled={order.payment_method === 'qris'}
-                className="flex-1 px-4 py-2 bg-cyan-100 text-cyan-700 hover:bg-cyan-200 rounded-lg font-medium transition disabled:opacity-50 text-sm"
-              >
-                Ubah ke QRIS
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </div>

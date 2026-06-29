@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Mail, Lock } from 'lucide-react'
+import logo from '../assets/logo.png'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -33,7 +34,7 @@ export default function Login() {
     <div className="min-h-screen bg-gradient-to-br from-primary-800 to-primary-700 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-lg shadow-xl p-8">
         <div className="flex justify-center mb-6">
-          <img src="/logo.png" alt="Kopay" className="w-16 h-16 rounded-lg" />
+          <img src={logo} alt="Kopay" className="w-16 h-16 rounded-lg" />
         </div>
 
         <h1 className="text-2xl font-bold text-center text-gray-900 mb-2">

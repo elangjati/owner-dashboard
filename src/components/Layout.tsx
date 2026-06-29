@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { LogOut, BarChart3, ShoppingCart, FileText, Calendar, Menu, X, Plus, UtensilsCrossed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { User } from '@supabase/supabase-js'
+import logo from '../assets/logo.png'
 
 import { useState } from 'react'
 
@@ -36,7 +37,7 @@ export default function Layout({ children }: LayoutProps) {
           <div className="flex items-center justify-between">
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="Kopay" className="w-10 h-10 rounded-lg" />
+              <img src={logo} alt="Kopay" className="w-10 h-10 rounded-lg" />
               <span className="font-bold text-lg tracking-tight">Kopay</span>
               <span className="text-amber-300 text-xs font-medium">owner</span>
             </div>
