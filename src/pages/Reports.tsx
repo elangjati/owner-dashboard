@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatCurrency } from '../lib/utils'
 import { Download, TrendingUp } from 'lucide-react'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 
 interface DailyReport {
   date: string
@@ -473,57 +472,23 @@ export default function Reports() {
 
       {/* Category Breakdown Section */}
       {categoryBreakdown.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Category Revenue Pie Chart */}
-          <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Revenue Berdasarkan Kategori</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={categoryBreakdown.map(c => ({
-                    name: CATEGORY_LABELS[c.category] || c.category,
-                    value: c.revenue
-                  }))}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, value }) => `${name}: ${formatCurrency(value)}`}
-                  outerRadius={100}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {categoryBreakdown.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.category] || '#999'} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => formatCurrency(value as number)} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Category Details Table */}
-          <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Detail Kategori</h3>
-            <div className="space-y-2">
-              {categoryBreakdown.map((cat) => (
-                <div key={cat.category} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-center gap-3 flex-1">
-                    <div
-                      className="w-4 h-4 rounded"
-                      style={{ backgroundColor: CATEGORY_COLORS[cat.category] || '#999' }}
-                    ></div>
-                    <div>
-                      <p className="font-medium text-gray-900">{CATEGORY_LABELS[cat.category] || cat.category}</p>
-                      <p className="text-xs text-gray-600">{cat.orders} item terjual</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-gray-900">{formatCurrency(cat.revenue)}</p>
-                    <p className="text-xs text-gray-500">{((cat.revenue / (categoryBreakdown.reduce((s, c) => s + c.revenue, 0))) * 100).toFixed(0)}%</p>
+        <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Detail Kategori</h3>
+          <div className="space-y-2">
+            {categoryBreakdown.map((cat) => (
+              <div key={cat.category} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center gap-3 flex-1">
+                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat.category] || '#999' }}></div>
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900">{CATEGORY_LABELS[cat.category] || cat.category}</p>
+                    <p className="text-sm text-gray-600">{cat.orders} pesanan</p>
                   </div>
                 </div>
-              ))}
-            </div>
+                <div className="text-right">
+                  <p className="font-semibold text-gray-900">{formatCurrency(cat.revenue)}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
