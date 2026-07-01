@@ -56,7 +56,6 @@ export default function Dashboard() {
         .lte('created_at', endWIB)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
-        .limit(10)
 
       const all = todayData || []
       const completed = all.filter(o => o.status === 'completed')

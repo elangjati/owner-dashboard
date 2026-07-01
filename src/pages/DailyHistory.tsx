@@ -28,6 +28,7 @@ export default function DailyHistory() {
         .select(`*, order_items(id, quantity, price, menu_id, menus(name))`)
         .gte('created_at', startWIB)
         .lte('created_at', endWIB)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
 
       if (error) throw error
