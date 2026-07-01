@@ -139,19 +139,65 @@ export default function Reports() {
 
 
   const handleExport = () => {
-    const rows = [['#', 'Pelanggan', 'Tanggal', 'Total (Rp)', 'Metode Bayar']]
-    completedOrders.forEach(o => rows.push([
-      String(o.id).padStart(4, '0'),
-      o.customer_name,
-      new Date(o.created_at).toLocaleDateString('id-ID'),
-      String(o.total_price || 0),
-      o.payment_method || ''
-    ]))
-    const csv = rows.map(r => r.join(',')).join('\n')
+    const dateLabel = mode === 'daily'
+      ? selectedDate
+      : `${MONTHS[selectedMonth - 1]}-${selectedYear}`
+
+    const lines: string[] = []
+
+    // === Section 1: Orders ===
+    lines.push(`LAPORAN ORDERS - ${mode === 'daily' ? selectedDate : `${MONTHS[selectedMonth-1]} ${selectedYear}`}`)
+    lines.push('Order ID,Pelanggan,Total (Rp),Status,Metode Bayar,Waktu')
+    completedOrders.forEach(o => {
+      const waktu = o.created_at
+        ? new Date(o.created_at).toLocaleString('id-ID')
+        : ''
+      lines.push(`${String(o.id).padStart(4,'0')},"${o.customer_name}",${o.total_price || 0},completed,${o.payment_method || ''},"${waktu}"`)
+    })
+
+    lines.push('')
+
+    // === Section 2: Order Items ===
+    lines.push('DETAIL ITEM PESANAN')
+    lines.push('Order ID,Pelanggan,Nama Menu,Qty,Harga Satuan,Subtotal,Metode Bayar,Waktu')
+    completedOrders.forEach(o => {
+      const waktu = o.created_at ? new Date(o.created_at).toLocaleString('id-ID') : ''
+      const items = o.order_items || []
+      if (items.length === 0) {
+        lines.push(`${String(o.id).padStart(4,'0')},"${o.customer_name}","—",0,0,0,${o.payment_method || ''},"${waktu}"`)
+      } else {
+        items.forEach((item: any) => {
+          const menuName = item.menus?.name || `Menu ${item.menu_id}`
+          const subtotal = (item.price || 0) * (item.quantity || 0)
+          lines.push(`${String(o.id).padStart(4,'0')},"${o.customer_name}","${menuName}",${item.quantity},${item.price || 0},${subtotal},${o.payment_method || ''},"${waktu}"`)
+        })
+      }
+    })
+
+    lines.push('')
+
+    // === Section 3: Rekap Produk ===
+    lines.push('REKAP PRODUK TERJUAL')
+    lines.push('Nama Menu,Qty Terjual,Total Revenue (Rp)')
+    topItems.forEach(item => {
+      lines.push(`"${item.menu_name}",${item.total_qty},${item.total_revenue}`)
+    })
+
+    lines.push('')
+
+    // === Section 4: Summary ===
+    lines.push('RINGKASAN')
+    lines.push(`Total Pesanan,${totalOrders}`)
+    lines.push(`Total Pendapatan,${totalRevenue}`)
+    lines.push(`Tunai,${tunaiRevenue},${tunaiOrders} pesanan`)
+    lines.push(`QRIS,${qrisRevenue},${qrisOrders} pesanan`)
+    lines.push(`Rata-rata per Pesanan,${Math.round(avgPerOrder)}`)
+
+    const csv = '\uFEFF' + lines.join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
-    link.download = mode === 'daily' ? `laporan-${selectedDate}.csv` : `laporan-${MONTHS[selectedMonth - 1]}-${selectedYear}.csv`
+    link.download = `laporan-kopay-${dateLabel}.csv`
     link.click()
   }
 
