@@ -1,233 +1,188 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { formatCurrency, formatDate } from '../lib/utils'
-import { Search } from 'lucide-react'
-import OrderDetailModal from '../components/OrderDetailModal'
 import type { Order } from '../types'
+
+function formatRupiah(val: number) {
+  return 'Rp ' + val.toLocaleString('id-ID')
+}
 
 export default function Orders() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month'>('today')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
-  const [modalOpen, setModalOpen] = useState(false)
 
   useEffect(() => {
     fetchOrders()
-  }, [dateRange])
 
-  const getDateFilter = () => {
-    const now = new Date()
-    let startDate: Date
+    const sub = supabase
+      .channel('orders_today')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        fetchOrders()
+      })
+      .subscribe()
 
-    if (dateRange === 'today') {
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    } else if (dateRange === 'week') {
-      startDate = new Date(now)
-      startDate.setDate(now.getDate() - 7)
-    } else {
-      startDate = new Date(now)
-      startDate.setMonth(now.getMonth() - 1)
-    }
-
-    return startDate.toISOString()
-  }
+    return () => { sub.unsubscribe() }
+  }, [])
 
   const fetchOrders = async () => {
+    setLoading(true)
     try {
-      setLoading(true)
+      const now = new Date()
+      const y = now.getFullYear()
+      const m = String(now.getMonth() + 1).padStart(2, '0')
+      const d = String(now.getDate()).padStart(2, '0')
+      const startWIB = `${y}-${m}-${d}T00:00:00+07:00`
+      const endWIB   = `${y}-${m}-${d}T23:59:59+07:00`
+
       const { data, error } = await supabase
         .from('orders')
-        .select(`
-          *,
-          order_items (
-            id,
-            quantity,
-            price,
-            menu_id,
-            menu:menu_id(id, name)
-          )
-        `)
-        .gte('created_at', getDateFilter())
+        .select(`*, order_items(id, quantity, price, menu_id, menus(name))`)
+        .gte('created_at', startWIB)
+        .lte('created_at', endWIB)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setOrders(data || [])
-    } catch (error) {
-      console.error('Error fetching orders:', error)
+      setOrders((data || []) as Order[])
+    } catch (err) {
+      console.error(err)
     } finally {
       setLoading(false)
     }
   }
 
-  const filteredOrders = orders.filter(
-    (order) =>
-      (order.id || '').toString().toLowerCase().includes(searchTerm.toLowerCase())
-  )
-
-  const handleOpenModal = (order: Order) => {
-    setSelectedOrder(order)
-    setModalOpen(true)
-  }
-
-  const handleUpdateOrders = () => {
-    setModalOpen(false)
-    fetchOrders()
-  }
+  const completed = orders.filter(o => o.status === 'completed')
+  const totalRevenue = completed.reduce((s, o) => s + (o.total_price || 0), 0)
 
   const getStatusBadge = (status: string) => {
-    const colors: Record<string, string> = {
-      completed: 'bg-green-100 text-green-700',
-      pending: 'bg-yellow-100 text-yellow-700',
-      cancelled: 'bg-red-100 text-red-700',
-    }
-    return colors[status] || 'bg-gray-100 text-gray-700'
+    if (status === 'completed')
+      return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Selesai</span>
+    if (status === 'pending')
+      return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">Pending</span>
+    return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{status}</span>
   }
 
+  const todayLabel = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
-        <p className="text-gray-500 mt-2">View all orders and their details</p>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex gap-2">
-            {(['today', 'week', 'month'] as const).map((range) => (
-              <button
-                key={range}
-                onClick={() => setDateRange(range)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  dateRange === range
-                    ? 'bg-primary-800 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {range.charAt(0).toUpperCase() + range.slice(1)}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-3 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Search by order ID..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent outline-none"
-            />
-          </div>
+    <>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Riwayat Pesanan Hari Ini</h2>
+          <p className="text-sm text-gray-500 mt-0.5">{todayLabel}</p>
         </div>
       </div>
 
-      {/* Orders Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Order ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Date & Time
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Total
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Payment Method
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {loading ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                    Loading orders...
-                  </td>
-                </tr>
-              ) : filteredOrders.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                    No orders found
-                  </td>
-                </tr>
-              ) : (
-                filteredOrders.map((order) => (
-                  <tr
-                    key={order.id}
-                    onClick={() => handleOpenModal(order)}
-                    className="hover:bg-gray-50 transition-colors cursor-pointer"
-                  >
-                    <td className="px-6 py-4 text-sm font-semibold text-primary-800">
-                      #{String(order.id).padStart(4, '0')}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {formatDate(order.created_at)}
-                    </td>
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                      {formatCurrency(order.total_price || 0)}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {order.payment_method || 'Cash'}
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(order.status || 'pending')}`}>
-                        {order.status || 'pending'}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      {orders.length === 0 && !loading ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+          <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          <p className="text-gray-400 text-sm">Belum ada pesanan hari ini.</p>
         </div>
-      </div>
-
-      {/* Summary */}
-      {filteredOrders.length > 0 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <p className="text-gray-500 text-sm">Total Orders</p>
-              <p className="text-2xl font-bold text-gray-900">{filteredOrders.length}</p>
+      ) : (
+        <>
+          {/* Summary strip */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Pesanan</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {loading ? <span className="inline-block h-7 w-8 bg-gray-100 rounded animate-pulse" /> : orders.length}
+              </p>
             </div>
-            <div>
-              <p className="text-gray-500 text-sm">Total Revenue</p>
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Selesai</p>
               <p className="text-2xl font-bold text-green-600">
-                {formatCurrency(
-                  filteredOrders.reduce((sum, o) => sum + (o.total_price || 0), 0)
-                )}
+                {loading ? <span className="inline-block h-7 w-8 bg-gray-100 rounded animate-pulse" /> : completed.length}
               </p>
             </div>
-            <div>
-              <p className="text-gray-500 text-sm">Average Order Value</p>
-              <p className="text-2xl font-bold text-blue-600">
-                {formatCurrency(
-                  filteredOrders.reduce((sum, o) => sum + (o.total_price || 0), 0) /
-                    filteredOrders.length
-                )}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 col-span-2 sm:col-span-1">
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Pendapatan</p>
+              <p className="text-2xl font-bold text-[#3d6b3d]">
+                {loading ? <span className="inline-block h-7 w-24 bg-gray-100 rounded animate-pulse" /> : formatRupiah(totalRevenue)}
               </p>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Order Detail Modal */}
-      <OrderDetailModal
-        order={selectedOrder}
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onUpdate={handleUpdateOrders}
-      />
-    </div>
+          {/* Desktop table */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hidden md:block">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">#</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Pelanggan</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Item</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Bayar</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Waktu</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-8 text-gray-400 text-sm">Memuat data...</td>
+                  </tr>
+                ) : (
+                  orders.map((order) => {
+                    const items = (order as any).order_items || []
+                    const itemStr = items.map((i: any) => `${i.menus?.name || 'Menu dihapus'} x${i.quantity}`).join(', ')
+                    const time = order.created_at
+                      ? new Date(order.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                      : '—'
+                    return (
+                      <tr key={order.id} className="hover:bg-gray-50 transition">
+                        <td className="px-5 py-3.5 text-gray-400 text-xs">{String(order.id).padStart(4, '0')}</td>
+                        <td className="px-5 py-3.5 font-medium text-gray-900">{order.customer_name}</td>
+                        <td className="px-5 py-3.5 text-gray-500 text-xs max-w-xs truncate">{itemStr || '—'}</td>
+                        <td className="px-5 py-3.5 font-semibold text-[#3d6b3d]">{formatRupiah(order.total_price || 0)}</td>
+                        <td className="px-5 py-3.5">{getStatusBadge(order.status || 'pending')}</td>
+                        <td className="px-5 py-3.5 text-gray-500 text-xs capitalize">{order.payment_method || '—'}</td>
+                        <td className="px-5 py-3.5 text-gray-400 text-xs">{time}</td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile card list */}
+          <div className="md:hidden space-y-3">
+            {loading ? (
+              <div className="p-8 text-center text-sm text-gray-400">Memuat data...</div>
+            ) : (
+              orders.map((order) => {
+                const items = (order as any).order_items || []
+                const itemStr = items.map((i: any) => `${i.menus?.name || 'Menu dihapus'} x${i.quantity}`).join(', ')
+                const time = order.created_at
+                  ? new Date(order.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                  : '—'
+                return (
+                  <div key={order.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-xs text-gray-400">#{String(order.id).padStart(4, '0')}</span>
+                          <span className="font-semibold text-gray-900 text-sm">{order.customer_name}</span>
+                        </div>
+                        <p className="text-xs text-gray-500">{itemStr || '—'}</p>
+                      </div>
+                      <span className="font-bold text-[#3d6b3d] text-sm ml-3 shrink-0">{formatRupiah(order.total_price || 0)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {getStatusBadge(order.status || 'pending')}
+                      {order.payment_method && (
+                        <span className="text-xs text-gray-400 capitalize">{order.payment_method}</span>
+                      )}
+                      <span className="text-xs text-gray-400">{time}</span>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </>
+      )}
+    </>
   )
 }
