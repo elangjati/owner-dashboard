@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { getTodayRangeWIB } from '../lib/timezone'
 import type { Order } from '../types'
 
 function formatRupiah(val: number) {
@@ -41,12 +42,7 @@ export default function Dashboard() {
   const fetchDashboard = async () => {
     setLoading(true)
     try {
-      const now = new Date()
-      const y = now.getFullYear()
-      const m = String(now.getMonth() + 1).padStart(2, '0')
-      const d = String(now.getDate()).padStart(2, '0')
-      const startWIB = `${y}-${m}-${d}T00:00:00+07:00`
-      const endWIB   = `${y}-${m}-${d}T23:59:59+07:00`
+      const { start: startWIB, end: endWIB } = getTodayRangeWIB()
 
       // Fetch semua pesanan hari ini
       const { data: todayData } = await supabase

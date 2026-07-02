@@ -64,7 +64,7 @@ export default function RecentOrders({ orders, loading }: RecentOrdersProps) {
               orders.map((order) => (
                 <tr key={order.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                    {order.order_number}
+                    #{String(order.id).padStart(4, '0')}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600">
                     {order.customer_name || 'Walk-in'}
@@ -73,14 +73,14 @@ export default function RecentOrders({ orders, loading }: RecentOrdersProps) {
                     {formatDate(order.created_at)}
                   </td>
                   <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                    {formatCurrency(order.total_amount || 0)}
+                    {formatCurrency(order.total_price || 0)}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
-                    {order.payment_method || 'Cash'}
+                  <td className="px-6 py-4 text-sm text-gray-600 uppercase">
+                    {order.payment_method || '—'}
                   </td>
                   <td className="px-6 py-4 text-sm">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(order.payment_status || 'pending')}`}>
-                      {order.payment_status}
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(order.status || 'pending')}`}>
+                      {order.status === 'completed' ? 'Selesai' : order.status === 'pending' ? 'Pending' : 'Dibatalkan'}
                     </span>
                   </td>
                 </tr>

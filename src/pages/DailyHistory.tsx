@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { getDateRangeWIB, todayWIB } from '../lib/timezone'
 import type { Order } from '../types'
 
 function formatRupiah(val: number) {
@@ -7,7 +8,7 @@ function formatRupiah(val: number) {
 }
 
 export default function DailyHistory() {
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(todayWIB())
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<number | string | null>(null)
@@ -20,8 +21,7 @@ export default function DailyHistory() {
   const fetchOrders = async () => {
     setLoading(true)
     try {
-      const startWIB = `${date}T00:00:00+07:00`
-      const endWIB   = `${date}T23:59:59+07:00`
+      const { start: startWIB, end: endWIB } = getDateRangeWIB(date)
 
       const { data, error } = await supabase
         .from('orders')
@@ -95,7 +95,7 @@ export default function DailyHistory() {
             />
           </div>
           <button
-            onClick={() => setDate(new Date().toISOString().split('T')[0])}
+            onClick={() => setDate(todayWIB())}
             className="border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition"
           >
             Hari Ini

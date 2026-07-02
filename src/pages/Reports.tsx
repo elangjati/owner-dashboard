@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { getDateRangeWIB, getMonthRangeWIB, todayWIB } from '../lib/timezone'
 
 function formatRupiah(val: number) {
   return 'Rp ' + val.toLocaleString('id-ID')
@@ -34,7 +35,7 @@ interface OrderRow {
 
 export default function Reports() {
   const [mode, setMode] = useState<'monthly' | 'daily'>('monthly')
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [selectedDate, setSelectedDate] = useState(todayWIB())
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
   const [years, setYears] = useState<number[]>([new Date().getFullYear()])
@@ -64,20 +65,18 @@ export default function Reports() {
   const fetchReports = async () => {
     setLoading(true)
     try {
-      let startDate: Date, endDate: Date
+      let start: string, end: string
       if (mode === 'daily') {
-        startDate = new Date(selectedDate + 'T00:00:00+07:00')
-        endDate = new Date(selectedDate + 'T23:59:59+07:00')
+        ({ start, end } = getDateRangeWIB(selectedDate))
       } else {
-        startDate = new Date(selectedYear, selectedMonth - 1, 1)
-        endDate = new Date(selectedYear, selectedMonth, 1)
+        ({ start, end } = getMonthRangeWIB(selectedYear, selectedMonth))
       }
 
       const { data: orders } = await supabase
         .from('orders')
         .select(`*, order_items(quantity, price, menu_id, menus(name))`)
-        .gte('created_at', startDate.toISOString())
-        .lt('created_at', endDate.toISOString())
+        .gte('created_at', start)
+        .lte('created_at', end)
         .eq('status', 'completed')
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
@@ -120,8 +119,8 @@ export default function Reports() {
       if (mode === 'monthly') {
         const { data: yearOrders } = await supabase
           .from('orders').select('created_at, total_price')
-          .gte('created_at', new Date(selectedYear, 0, 1).toISOString())
-          .lt('created_at', new Date(selectedYear + 1, 0, 1).toISOString())
+          .gte('created_at', getMonthRangeWIB(selectedYear, 1).start)
+          .lte('created_at', getMonthRangeWIB(selectedYear, 12).end)
           .eq('status', 'completed').is('deleted_at', null)
         const mData: Record<number, number> = {}
         ;(yearOrders || []).forEach(o => {
@@ -207,7 +206,7 @@ export default function Reports() {
   const maxMonthlyRev = Math.max(...Object.values(monthlyData), 1)
 
   const periodLabel = mode === 'daily'
-    ? new Date(selectedDate + 'T12:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+    ? new Date(selectedDate + 'T12:00:00+07:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     : `${MONTHS[selectedMonth - 1]} ${selectedYear}`
 
 
