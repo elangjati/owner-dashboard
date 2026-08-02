@@ -3,6 +3,14 @@ import { supabase } from '../lib/supabase'
 import { getDateRangeWIB, todayWIB } from '../lib/timezone'
 import type { Order } from '../types'
 
+interface Expense {
+  id: number
+  date: string
+  amount: number
+  description: string
+  created_at: string
+}
+
 function formatRupiah(val: number) {
   return 'Rp ' + val.toLocaleString('id-ID')
 }
@@ -10,13 +18,31 @@ function formatRupiah(val: number) {
 export default function DailyHistory() {
   const [date, setDate] = useState(todayWIB())
   const [orders, setOrders] = useState<Order[]>([])
+  const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<number | string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [showExpenseDetail, setShowExpenseDetail] = useState(false)
 
   useEffect(() => {
     fetchOrders()
+    fetchExpenses()
   }, [date])
+
+  const fetchExpenses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('date', date)
+        .order('created_at', { ascending: true })
+
+      if (error) throw error
+      setExpenses((data || []) as Expense[])
+    } catch (err) {
+      console.error('Error fetching expenses:', err)
+    }
+  }
 
   const fetchOrders = async () => {
     setLoading(true)
@@ -60,6 +86,8 @@ export default function DailyHistory() {
   const totalRevenue = completed.reduce((s, o) => s + (o.total_price || 0), 0)
   const tunaiRevenue = completed.filter(o => o.payment_method === 'tunai').reduce((s, o) => s + (o.total_price || 0), 0)
   const qrisRevenue = completed.filter(o => o.payment_method === 'qris').reduce((s, o) => s + (o.total_price || 0), 0)
+  const totalExpense = expenses.reduce((s, e) => s + e.amount, 0)
+  const netProfit = totalRevenue - totalExpense
 
   const getStatusBadge = (status: string) => {
     if (status === 'completed')
@@ -131,17 +159,27 @@ export default function DailyHistory() {
             </div>
           </div>
 
-          {/* Tunai & QRIS */}
-          <div className="grid grid-cols-2 gap-4 mb-6">
+          {/* Tunai, QRIS, Pengeluaran, Profit */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
             <div className="bg-white rounded-xl border border-gray-200 p-4">
               <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Tunai</p>
               <p className="text-xl font-bold text-gray-900">{formatRupiah(tunaiRevenue)}</p>
-              <p className="text-xs text-gray-400 mt-1">💰 Metode pembayaran tunai</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-200 p-4">
               <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">QRIS</p>
               <p className="text-xl font-bold text-gray-900">{formatRupiah(qrisRevenue)}</p>
-              <p className="text-xs text-gray-400 mt-1">📱 Metode pembayaran digital</p>
+            </div>
+            <div 
+              className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:shadow-md transition"
+              onClick={() => setShowExpenseDetail(true)}
+            >
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Pengeluaran</p>
+              <p className="text-xl font-bold text-red-600">{formatRupiah(totalExpense)}</p>
+              <p className="text-xs text-gray-400 mt-1">{expenses.length} transaksi</p>
+            </div>
+            <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border-2 border-green-500 p-4">
+              <p className="text-xs text-green-700 uppercase tracking-wide mb-1 font-semibold">Profit Bersih</p>
+              <p className="text-xl font-bold text-green-700">{formatRupiah(netProfit)}</p>
             </div>
           </div>
         </>
@@ -285,6 +323,74 @@ export default function DailyHistory() {
           })
         )}
       </div>
+
+      {/* Expense Detail Modal */}
+      {showExpenseDetail && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setShowExpenseDetail(false)}>
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Detail Pengeluaran</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">{dateLabel}</p>
+                </div>
+                <button
+                  onClick={() => setShowExpenseDetail(false)}
+                  className="text-gray-400 hover:text-gray-600 transition"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[calc(80vh-180px)]">
+              {expenses.length === 0 ? (
+                <div className="text-center py-12">
+                  <svg className="w-16 h-16 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-gray-400 text-sm">Tidak ada pengeluaran hari ini</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {expenses.map((expense) => {
+                    const time = new Date(expense.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                    return (
+                      <div key={expense.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <div className="flex items-start justify-between mb-1">
+                          <p className="font-medium text-gray-900 text-sm">{expense.description}</p>
+                          <p className="font-bold text-red-600 text-sm ml-3 shrink-0">{formatRupiah(expense.amount)}</p>
+                        </div>
+                        <p className="text-xs text-gray-400">{time}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-200 bg-gray-50">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Pendapatan Kotor</span>
+                  <span className="font-semibold text-gray-900">{formatRupiah(totalRevenue)}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Total Pengeluaran</span>
+                  <span className="font-semibold text-red-600">{formatRupiah(totalExpense)}</span>
+                </div>
+                <div className="h-px bg-gray-300 my-2"></div>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-gray-900">Profit Bersih</span>
+                  <span className="font-bold text-lg text-green-600">{formatRupiah(netProfit)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

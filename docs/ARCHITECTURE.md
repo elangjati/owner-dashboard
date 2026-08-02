@@ -1,4 +1,4 @@
-# 🏗️ Owner Dashboard - Architecture & Components
+q# 🏗️ Owner Dashboard - Architecture & Components
 
 Complete guide to the project structure and how everything works together.
 
