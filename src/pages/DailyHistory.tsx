@@ -23,11 +23,13 @@ export default function DailyHistory() {
   const [deleteConfirm, setDeleteConfirm] = useState<number | string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [showExpenseDetail, setShowExpenseDetail] = useState(false)
+  const [showDeleted, setShowDeleted] = useState(false)
 
   useEffect(() => {
     fetchOrders()
     fetchExpenses()
-  }, [date])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, showDeleted])
 
   const fetchExpenses = async () => {
     try {
@@ -49,16 +51,41 @@ export default function DailyHistory() {
     try {
       const { start: startWIB, end: endWIB } = getDateRangeWIB(date)
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('orders')
         .select(`*, order_items(id, quantity, price, menu_id, menus(name))`)
         .gte('created_at', startWIB)
         .lte('created_at', endWIB)
-        .is('deleted_at', null)
         .order('created_at', { ascending: false })
 
+      if (showDeleted) {
+        query = query.not('deleted_at', 'is', null)
+      } else {
+        query = query.is('deleted_at', null)
+      }
+
+      const { data, error } = await query
+
       if (error) throw error
-      setOrders((data || []) as Order[])
+      
+      // Fetch users data separately
+      const { data: usersData } = await supabase
+        .from('users')
+        .select('id, name')
+      
+      // Map users by id for easy lookup
+      const usersMap = (usersData || []).reduce((acc: any, user: any) => {
+        acc[user.id] = user
+        return acc
+      }, {})
+      
+      // Attach user data to orders
+      const ordersWithUsers = (data || []).map((order: any) => ({
+        ...order,
+        users: order.deleted_by ? usersMap[order.deleted_by] : null
+      }))
+      
+      setOrders(ordersWithUsers as Order[])
     } catch (err) {
       console.error(err)
     } finally {
@@ -133,6 +160,32 @@ export default function DailyHistory() {
             className="bg-[#1a3a1a] hover:bg-[#122812] text-white text-sm font-medium px-5 py-2.5 rounded-xl transition shadow-sm"
           >
             Tampilkan
+          </button>
+        </div>
+      </div>
+
+      {/* Toggle Deleted Orders */}
+      <div className="bg-white rounded-xl border border-gray-200 p-3 mb-6 shadow-sm">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowDeleted(false)}
+            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition ${
+              !showDeleted
+                ? 'bg-[#1a3a1a] text-white shadow-sm'
+                : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Pesanan Aktif
+          </button>
+          <button
+            onClick={() => setShowDeleted(true)}
+            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition ${
+              showDeleted
+                ? 'bg-red-600 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Pesanan Dihapus
           </button>
         </div>
       </div>
@@ -217,43 +270,63 @@ export default function DailyHistory() {
                 const time = order.created_at
                   ? new Date(order.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
                   : '—'
+                const deletedTime = order.deleted_at
+                  ? new Date(order.deleted_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                  : '—'
+                const deletedBy = (order as any).users?.name || 'Unknown'
+                
                 return (
-                  <tr key={order.id} className="hover:bg-gray-50 transition">
+                  <tr key={order.id} className={`hover:bg-gray-50 transition ${showDeleted ? 'bg-red-50' : ''}`}>
                     <td className="px-5 py-3.5 text-gray-400 text-xs">{String(order.id).padStart(4, '0')}</td>
                     <td className="px-5 py-3.5 font-medium text-gray-900">{order.customer_name}</td>
                     <td className="px-5 py-3.5 text-gray-500 text-xs max-w-xs truncate">{itemStr || '—'}</td>
                     <td className="px-5 py-3.5 font-semibold text-[#3d6b3d]">{formatRupiah(order.total_price || 0)}</td>
-                    <td className="px-5 py-3.5">{getStatusBadge(order.status || 'pending')}</td>
+                    <td className="px-5 py-3.5">
+                      {showDeleted ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">DIHAPUS</span>
+                      ) : (
+                        getStatusBadge(order.status || 'pending')
+                      )}
+                    </td>
                     <td className="px-5 py-3.5 text-gray-500 text-xs capitalize">{order.payment_method || '—'}</td>
                     <td className="px-5 py-3.5 text-gray-400 text-xs">{time}</td>
                     <td className="px-5 py-3.5">
-                      {order.status === 'completed' && (
-                        deleteConfirm === order.id ? (
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => handleDelete(order.id)}
-                              disabled={deleting}
-                              className="text-xs font-semibold text-white px-2.5 py-1 rounded-lg bg-red-500 hover:bg-red-600"
-                            >
-                              {deleting ? '...' : 'Yakin?'}
-                            </button>
-                            <button
-                              onClick={() => setDeleteConfirm(null)}
-                              className="text-xs text-gray-600 hover:text-gray-900 px-2.5 py-1 rounded-lg border border-gray-300 hover:bg-gray-50"
-                            >
-                              Batal
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setDeleteConfirm(order.id)}
-                            className="text-xs font-medium text-red-500 hover:text-red-700 transition"
-                          >
-                            Hapus
-                          </button>
-                        )
+                      {showDeleted ? (
+                        <div className="text-xs text-gray-600">
+                          <div className="font-medium text-red-600">{deletedBy}</div>
+                          <div className="text-gray-400">{deletedTime}</div>
+                        </div>
+                      ) : (
+                        <>
+                          {order.status === 'completed' && (
+                            deleteConfirm === order.id ? (
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => handleDelete(order.id)}
+                                  disabled={deleting}
+                                  className="text-xs font-semibold text-white px-2.5 py-1 rounded-lg bg-red-500 hover:bg-red-600"
+                                >
+                                  {deleting ? '...' : 'Yakin?'}
+                                </button>
+                                <button
+                                  onClick={() => setDeleteConfirm(null)}
+                                  className="text-xs text-gray-600 hover:text-gray-900 px-2.5 py-1 rounded-lg border border-gray-300 hover:bg-gray-50"
+                                >
+                                  Batal
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setDeleteConfirm(order.id)}
+                                className="text-xs font-medium text-red-500 hover:text-red-700 transition"
+                              >
+                                Hapus
+                              </button>
+                            )
+                          )}
+                          {order.status !== 'completed' && <span className="text-xs text-gray-300">—</span>}
+                        </>
                       )}
-                      {order.status !== 'completed' && <span className="text-xs text-gray-300">—</span>}
                     </td>
                   </tr>
                 )
@@ -278,8 +351,13 @@ export default function DailyHistory() {
             const time = order.created_at
               ? new Date(order.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
               : '—'
+            const deletedTime = order.deleted_at
+              ? new Date(order.deleted_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+              : '—'
+            const deletedBy = (order as any).users?.name || 'Unknown'
+            
             return (
-              <div key={order.id} className="bg-white rounded-xl border border-gray-200 p-4">
+              <div key={order.id} className={`bg-white rounded-xl border border-gray-200 p-4 ${showDeleted ? 'border-red-200 bg-red-50' : ''}`}>
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <div className="flex items-center gap-2 mb-0.5">
@@ -291,14 +369,24 @@ export default function DailyHistory() {
                   <span className="font-bold text-[#3d6b3d] text-sm ml-3 shrink-0">{formatRupiah(order.total_price || 0)}</span>
                 </div>
                 <div className="flex items-center justify-between mt-3">
-                  <div className="flex items-center gap-2">
-                    {getStatusBadge(order.status || 'pending')}
-                    {order.payment_method && (
-                      <span className="text-xs text-gray-400 capitalize">{order.payment_method}</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {showDeleted ? (
+                      <>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">DIHAPUS</span>
+                        <span className="text-xs text-red-600 font-medium">{deletedBy}</span>
+                        <span className="text-xs text-gray-400">{deletedTime}</span>
+                      </>
+                    ) : (
+                      <>
+                        {getStatusBadge(order.status || 'pending')}
+                        {order.payment_method && (
+                          <span className="text-xs text-gray-400 capitalize">{order.payment_method}</span>
+                        )}
+                        <span className="text-xs text-gray-400">{time}</span>
+                      </>
                     )}
-                    <span className="text-xs text-gray-400">{time}</span>
                   </div>
-                  {order.status === 'completed' && (
+                  {!showDeleted && order.status === 'completed' && (
                     deleteConfirm === order.id ? (
                       <div className="flex gap-1">
                         <button onClick={() => handleDelete(order.id)} disabled={deleting}

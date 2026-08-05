@@ -38,6 +38,10 @@ export interface Order {
   notes?: string
   created_at: string
   deleted_at?: string
+  deleted_by?: string
+  users?: {
+    name: string
+  }
   items?: OrderItem[]
   order_items?: OrderItem[]
 }
