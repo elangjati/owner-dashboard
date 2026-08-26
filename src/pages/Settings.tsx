@@ -35,13 +35,23 @@ export default function Settings() {
 
     try {
       // 1. Verifikasi PIN lama
-      const { data: currentPinData } = await supabase
+      const { data: currentPinData, error: fetchError } = await supabase
         .from('app_settings')
         .select('value')
         .eq('key', 'report_pin')
         .maybeSingle()
 
-      if (!currentPinData || currentPinData.value !== currentPin) {
+      if (fetchError) {
+        console.error('Error fetching PIN:', fetchError)
+        setMessage({ type: 'error', text: 'Gagal memuat PIN. Silakan coba lagi.' })
+        setLoading(false)
+        return
+      }
+
+      // Fallback to default PIN if not set in database
+      const existingPin = currentPinData?.value || '123456'
+
+      if (existingPin !== currentPin) {
         setMessage({ type: 'error', text: 'PIN lama salah' })
         setLoading(false)
         return
@@ -50,11 +60,16 @@ export default function Settings() {
       // 2. Update PIN baru
       const { error } = await supabase
         .from('app_settings')
-        .upsert({
-          key: 'report_pin',
-          value: newPin,
-          updated_at: new Date().toISOString(),
-        })
+        .upsert(
+          {
+            key: 'report_pin',
+            value: newPin,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: 'key', // Specify conflict column
+          }
+        )
 
       if (error) throw error
 
