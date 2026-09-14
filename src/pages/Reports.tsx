@@ -51,10 +51,31 @@ export default function Reports() {
 
   useEffect(() => {
     const fetchYears = async () => {
-      const { data } = await supabase.from('orders').select('created_at').eq('status', 'completed').is('deleted_at', null)
-      if (data && data.length > 0) {
-        const unique = [...new Set(data.map(o => new Date(o.created_at).getFullYear()))].sort((a, b) => b - a)
-        setYears(unique.length ? unique : [new Date().getFullYear()])
+      // Fetch oldest and newest orders to determine year range
+      const { data: oldest } = await supabase
+        .from('orders')
+        .select('created_at')
+        .eq('status', 'completed')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: true })
+        .limit(1)
+
+      const { data: newest } = await supabase
+        .from('orders')
+        .select('created_at')
+        .eq('status', 'completed')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (oldest && oldest.length > 0 && newest && newest.length > 0) {
+        const startYear = new Date(oldest[0].created_at).getFullYear()
+        const endYear = new Date(newest[0].created_at).getFullYear()
+        const yearRange = []
+        for (let y = endYear; y >= startYear; y--) {
+          yearRange.push(y)
+        }
+        setYears(yearRange.length ? yearRange : [new Date().getFullYear()])
       } else {
         // Default include both 2025 and 2026 if no data
         setYears([2026, 2025])
