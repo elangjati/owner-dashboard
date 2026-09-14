@@ -96,22 +96,38 @@ export default function Reports() {
         ({ start, end } = getMonthRangeWIB(selectedYear, selectedMonth))
       }
 
-      const { data: orders } = await supabase
-        .from('orders')
-        .select(`*, order_items(quantity, price, menu_id, menus(name))`)
-        .gte('created_at', start)
-        .lte('created_at', end)
-        .eq('status', 'completed')
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
+      // Fetch ALL orders with pagination to avoid 1000 row limit
+      let allOrders: OrderRow[] = []
+      let from = 0
+      const pageSize = 1000
+      let hasMore = true
 
-      const all = (orders || []) as OrderRow[]
-      setCompletedOrders(all)
+      while (hasMore) {
+        const { data: orders } = await supabase
+          .from('orders')
+          .select(`*, order_items(quantity, price, menu_id, menus(name))`)
+          .gte('created_at', start)
+          .lte('created_at', end)
+          .eq('status', 'completed')
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+          .range(from, from + pageSize - 1)
+
+        if (orders && orders.length > 0) {
+          allOrders = allOrders.concat(orders as OrderRow[])
+          from += pageSize
+          hasMore = orders.length === pageSize
+        } else {
+          hasMore = false
+        }
+      }
+
+      setCompletedOrders(allOrders)
 
       let tunai = 0, qris = 0, tunaiCount = 0, qrisCount = 0
       const grouped: Record<string, { revenue: number; count: number }> = {}
 
-      all.forEach(order => {
+      allOrders.forEach(order => {
         const date = new Date(order.created_at).toISOString().split('T')[0]
         if (!grouped[date]) grouped[date] = { revenue: 0, count: 0 }
         grouped[date].revenue += order.total_price || 0
@@ -130,7 +146,7 @@ export default function Reports() {
 
       // Top items
       const itemMap = new Map<string, { qty: number; revenue: number }>()
-      all.forEach(order => {
+      allOrders.forEach(order => {
         order.order_items?.forEach((item: any) => {
           const name = item.menus?.name || `Menu ${item.menu_id}`
           const ex = itemMap.get(name) || { qty: 0, revenue: 0 }
@@ -141,13 +157,30 @@ export default function Reports() {
 
       // Monthly bar chart data (only in monthly mode)
       if (mode === 'monthly') {
-        const { data: yearOrders } = await supabase
-          .from('orders').select('created_at, total_price')
-          .gte('created_at', getMonthRangeWIB(selectedYear, 1).start)
-          .lte('created_at', getMonthRangeWIB(selectedYear, 12).end)
-          .eq('status', 'completed').is('deleted_at', null)
+        // Fetch ALL year data with pagination
+        let allYearOrders: { created_at: string; total_price: number }[] = []
+        let yearFrom = 0
+        let yearHasMore = true
+
+        while (yearHasMore) {
+          const { data: yearOrders } = await supabase
+            .from('orders').select('created_at, total_price')
+            .gte('created_at', getMonthRangeWIB(selectedYear, 1).start)
+            .lte('created_at', getMonthRangeWIB(selectedYear, 12).end)
+            .eq('status', 'completed').is('deleted_at', null)
+            .range(yearFrom, yearFrom + pageSize - 1)
+
+          if (yearOrders && yearOrders.length > 0) {
+            allYearOrders = allYearOrders.concat(yearOrders)
+            yearFrom += pageSize
+            yearHasMore = yearOrders.length === pageSize
+          } else {
+            yearHasMore = false
+          }
+        }
+
         const mData: Record<number, number> = {}
-        ;(yearOrders || []).forEach(o => {
+        allYearOrders.forEach(o => {
           const mo = new Date(o.created_at).getMonth() + 1
           mData[mo] = (mData[mo] || 0) + (o.total_price || 0)
         })
