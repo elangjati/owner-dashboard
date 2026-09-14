@@ -52,9 +52,12 @@ export default function Reports() {
   useEffect(() => {
     const fetchYears = async () => {
       const { data } = await supabase.from('orders').select('created_at').eq('status', 'completed').is('deleted_at', null)
-      if (data) {
+      if (data && data.length > 0) {
         const unique = [...new Set(data.map(o => new Date(o.created_at).getFullYear()))].sort((a, b) => b - a)
         setYears(unique.length ? unique : [new Date().getFullYear()])
+      } else {
+        // Default include both 2025 and 2026 if no data
+        setYears([2026, 2025])
       }
     }
     fetchYears()
