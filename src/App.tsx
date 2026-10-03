@@ -10,6 +10,7 @@ import Reports from './pages/Reports'
 import Kasir from './pages/Kasir'
 import Menus from './pages/Menus'
 import Settings from './pages/Settings'
+import Attendance from './pages/Attendance'
 import Login from './pages/Login'
 import Loading from './components/Loading'
 
@@ -52,6 +53,7 @@ function App() {
           <Route path="/menus" element={<Menus />} />
           <Route path="/daily-history" element={<DailyHistory />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/attendance" element={<Attendance />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
