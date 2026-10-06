@@ -33,6 +33,14 @@ interface OrderRow {
   order_items: { quantity: number; price: number; menu_id: number; menus?: { name: string } }[]
 }
 
+interface Expense {
+  id: number
+  date: string
+  amount: number
+  description: string
+  created_at: string
+}
+
 export default function Reports() {
   const [mode, setMode] = useState<'monthly' | 'daily'>('monthly')
   const [selectedDate, setSelectedDate] = useState(todayWIB())
@@ -43,6 +51,7 @@ export default function Reports() {
   const [reports, setReports] = useState<DailyReport[]>([])
   const [topItems, setTopItems] = useState<TopItem[]>([])
   const [completedOrders, setCompletedOrders] = useState<OrderRow[]>([])
+  const [expenses, setExpenses] = useState<Expense[]>([])
   const [tunaiRevenue, setTunaiRevenue] = useState(0)
   const [qrisRevenue, setQrisRevenue] = useState(0)
   const [tunaiOrders, setTunaiOrders] = useState(0)
@@ -124,6 +133,15 @@ export default function Reports() {
 
       setCompletedOrders(allOrders)
 
+      // Fetch expenses for the period
+      const { data: expensesData } = await supabase
+        .from('expenses')
+        .select('*')
+        .gte('date', start.split('T')[0])
+        .lte('date', end.split('T')[0])
+      
+      setExpenses((expensesData || []) as Expense[])
+
       let tunai = 0, qris = 0, tunaiCount = 0, qrisCount = 0
       const grouped: Record<string, { revenue: number; count: number }> = {}
 
@@ -201,53 +219,120 @@ export default function Reports() {
 
     const lines: string[] = []
 
-    // === Section 1: Orders ===
-    lines.push(`LAPORAN ORDERS - ${mode === 'daily' ? selectedDate : `${MONTHS[selectedMonth-1]} ${selectedYear}`}`)
-    lines.push('Order ID,Pelanggan,Total (Rp),Status,Metode Bayar,Waktu')
-    completedOrders.forEach(o => {
-      const waktu = o.created_at
-        ? new Date(o.created_at).toLocaleString('id-ID')
-        : ''
-      lines.push(`${String(o.id).padStart(4,'0')},"${o.customer_name}",${o.total_price || 0},completed,${o.payment_method || ''},"${waktu}"`)
-    })
-
-    lines.push('')
-
-    // === Section 2: Order Items ===
-    lines.push('DETAIL ITEM PESANAN')
-    lines.push('Order ID,Pelanggan,Nama Menu,Qty,Harga Satuan,Subtotal,Metode Bayar,Waktu')
-    completedOrders.forEach(o => {
-      const waktu = o.created_at ? new Date(o.created_at).toLocaleString('id-ID') : ''
-      const items = o.order_items || []
-      if (items.length === 0) {
-        lines.push(`${String(o.id).padStart(4,'0')},"${o.customer_name}","—",0,0,0,${o.payment_method || ''},"${waktu}"`)
-      } else {
-        items.forEach((item: any) => {
-          const menuName = item.menus?.name || `Menu ${item.menu_id}`
-          const subtotal = (item.price || 0) * (item.quantity || 0)
-          lines.push(`${String(o.id).padStart(4,'0')},"${o.customer_name}","${menuName}",${item.quantity},${item.price || 0},${subtotal},${o.payment_method || ''},"${waktu}"`)
+    if (mode === 'monthly') {
+      // === MONTHLY SUMMARY EXPORT (Simple) ===
+      lines.push(`LAPORAN BULANAN - ${MONTHS[selectedMonth - 1]} ${selectedYear}`)
+      lines.push('')
+      
+      // Summary
+      lines.push('RINGKASAN')
+      lines.push(`Periode,${MONTHS[selectedMonth - 1]} ${selectedYear}`)
+      lines.push(`Total Pesanan,${totalOrders}`)
+      lines.push(`Total Pendapatan,${formatRupiah(totalRevenue)}`)
+      lines.push(`Rata-rata per Pesanan,${formatRupiah(Math.round(avgPerOrder))}`)
+      lines.push('')
+      
+      // Payment Methods
+      lines.push('METODE PEMBAYARAN')
+      lines.push('Metode,Jumlah Pesanan,Total Revenue')
+      lines.push(`Tunai,${tunaiOrders},${formatRupiah(tunaiRevenue)}`)
+      lines.push(`QRIS,${qrisOrders},${formatRupiah(qrisRevenue)}`)
+      lines.push('')
+      
+      // Top Items
+      lines.push('TOP 5 MENU TERLARIS')
+      lines.push('Nama Menu,Qty Terjual,Total Revenue')
+      topItems.forEach(item => {
+        lines.push(`"${item.menu_name}",${item.total_qty},${formatRupiah(item.total_revenue)}`)
+      })
+      lines.push('')
+      
+      // Daily breakdown (agregat per hari)
+      lines.push('BREAKDOWN HARIAN')
+      lines.push('Tanggal,Jumlah Pesanan,Total Revenue,Rata-rata per Pesanan')
+      reports.forEach(r => {
+        const dateStr = new Date(r.date + 'T12:00:00+07:00').toLocaleDateString('id-ID', { 
+          day: 'numeric', 
+          month: 'short', 
+          year: 'numeric' 
         })
-      }
-    })
+        lines.push(`${dateStr},${r.orders},${formatRupiah(r.revenue)},${formatRupiah(Math.round(r.avgOrderValue))}`)
+      })
+      lines.push('')
+      
+      // Expenses
+      const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0)
+      lines.push('PENGELUARAN')
+      lines.push('Tanggal,Deskripsi,Jumlah')
+      expenses.forEach(e => {
+        const dateStr = new Date(e.date + 'T12:00:00+07:00').toLocaleDateString('id-ID', { 
+          day: 'numeric', 
+          month: 'short', 
+          year: 'numeric' 
+        })
+        lines.push(`${dateStr},"${e.description}",${formatRupiah(e.amount)}`)
+      })
+      lines.push('')
+      lines.push(`Total Pengeluaran,,${formatRupiah(totalExpenses)}`)
+      lines.push('')
+      
+      // Net Profit
+      const netProfit = totalRevenue - totalExpenses
+      lines.push('LABA BERSIH')
+      lines.push(`Pendapatan,,${formatRupiah(totalRevenue)}`)
+      lines.push(`Pengeluaran,,${formatRupiah(totalExpenses)}`)
+      lines.push(`Laba/Rugi Bersih,,${formatRupiah(netProfit)}`)
+      
+    } else {
+      // === DAILY DETAILED EXPORT (Original) ===
+      lines.push(`LAPORAN HARIAN - ${selectedDate}`)
+      lines.push('')
+      
+      // Section 1: Orders
+      lines.push('DAFTAR PESANAN')
+      lines.push('Order ID,Pelanggan,Total,Status,Metode Bayar,Waktu')
+      completedOrders.forEach(o => {
+        const waktu = o.created_at
+          ? new Date(o.created_at).toLocaleString('id-ID')
+          : ''
+        lines.push(`${String(o.id).padStart(4,'0')},"${o.customer_name}",${formatRupiah(o.total_price || 0)},completed,${o.payment_method || ''},"${waktu}"`)
+      })
+      lines.push('')
 
-    lines.push('')
+      // Section 2: Order Items
+      lines.push('DETAIL ITEM PESANAN')
+      lines.push('Order ID,Pelanggan,Nama Menu,Qty,Harga Satuan,Subtotal,Metode Bayar,Waktu')
+      completedOrders.forEach(o => {
+        const waktu = o.created_at ? new Date(o.created_at).toLocaleString('id-ID') : ''
+        const items = o.order_items || []
+        if (items.length === 0) {
+          lines.push(`${String(o.id).padStart(4,'0')},"${o.customer_name}","—",0,0,0,${o.payment_method || ''},"${waktu}"`)
+        } else {
+          items.forEach((item: any) => {
+            const menuName = item.menus?.name || `Menu ${item.menu_id}`
+            const subtotal = (item.price || 0) * (item.quantity || 0)
+            lines.push(`${String(o.id).padStart(4,'0')},"${o.customer_name}","${menuName}",${item.quantity},${formatRupiah(item.price || 0)},${formatRupiah(subtotal)},${o.payment_method || ''},"${waktu}"`)
+          })
+        }
+      })
+      lines.push('')
 
-    // === Section 3: Rekap Produk ===
-    lines.push('REKAP PRODUK TERJUAL')
-    lines.push('Nama Menu,Qty Terjual,Total Revenue (Rp)')
-    topItems.forEach(item => {
-      lines.push(`"${item.menu_name}",${item.total_qty},${item.total_revenue}`)
-    })
+      // Section 3: Top Items
+      lines.push('REKAP PRODUK TERJUAL')
+      lines.push('Nama Menu,Qty Terjual,Total Revenue')
+      topItems.forEach(item => {
+        lines.push(`"${item.menu_name}",${item.total_qty},${formatRupiah(item.total_revenue)}`)
+      })
+      lines.push('')
 
-    lines.push('')
-
-    // === Section 4: Summary ===
-    lines.push('RINGKASAN')
-    lines.push(`Total Pesanan,${totalOrders}`)
-    lines.push(`Total Pendapatan,${totalRevenue}`)
-    lines.push(`Tunai,${tunaiRevenue},${tunaiOrders} pesanan`)
-    lines.push(`QRIS,${qrisRevenue},${qrisOrders} pesanan`)
-    lines.push(`Rata-rata per Pesanan,${Math.round(avgPerOrder)}`)
+      // Section 4: Summary
+      lines.push('RINGKASAN')
+      lines.push(`Total Pesanan,${totalOrders}`)
+      lines.push(`Total Pendapatan,${formatRupiah(totalRevenue)}`)
+      lines.push(`Tunai,${formatRupiah(tunaiRevenue)},${tunaiOrders} pesanan`)
+      lines.push(`QRIS,${formatRupiah(qrisRevenue)},${qrisOrders} pesanan`)
+      lines.push(`Rata-rata per Pesanan,${formatRupiah(Math.round(avgPerOrder))}`)
+    }
 
     const csv = '\uFEFF' + lines.join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })

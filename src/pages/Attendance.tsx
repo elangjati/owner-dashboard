@@ -33,43 +33,69 @@ export default function Attendance() {
   const fetchAttendances = async () => {
     setLoading(true)
     try {
-      const startOfDay = new Date(selectedDate + 'T00:00:00+07:00')
-      const endOfDay = new Date(selectedDate + 'T23:59:59+07:00')
-
+      // Simple query: fetch all data
       const { data, error } = await supabase
         .from('attendances')
         .select('*')
-        .gte('clock_in', startOfDay.toISOString())
-        .lte('clock_in', endOfDay.toISOString())
         .order('clock_in', { ascending: false })
 
-      if (error) throw error
-      setAttendances((data || []) as AttendanceRow[])
+      if (error) {
+        console.error('Supabase error:', error)
+        throw error
+      }
+
+      // Filter by selected date on client side
+      const filtered = (data || []).filter(item => {
+        const itemDate = new Date(item.clock_in).toISOString().split('T')[0]
+        return itemDate === selectedDate
+      })
+
+      setAttendances(filtered as AttendanceRow[])
     } catch (err) {
-      console.error(err)
+      console.error('Fetch error:', err)
     } finally {
       setLoading(false)
     }
   }
 
   const calculateDuration = (clockIn: string, clockOut: string | null) => {
-    const start = new Date(clockIn)
-    const end = clockOut ? new Date(clockOut) : new Date()
-    const diff = end.getTime() - start.getTime()
+    // Parse as UTC timestamps
+    const start = new Date(clockIn).getTime()
+    const end = clockOut ? new Date(clockOut).getTime() : Date.now()
+    const diff = end - start
+    
+    // Prevent negative duration
+    if (diff < 0) {
+      return '0m 0s'
+    }
+    
     const hours = Math.floor(diff / (1000 * 60 * 60))
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-    return `${hours}h ${minutes}m`
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ${seconds}s`
+    } else {
+      return `${minutes}m ${seconds}s`
+    }
   }
 
   const formatTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleTimeString('id-ID', {
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    // Parse as UTC, then convert to WIB (UTC+7)
+    const utcDate = new Date(dateStr)
+    const wibDate = new Date(utcDate.getTime() + (7 * 60 * 60 * 1000))
+    
+    const hours = wibDate.getUTCHours().toString().padStart(2, '0')
+    const minutes = wibDate.getUTCMinutes().toString().padStart(2, '0')
+    
+    return `${hours}.${minutes}`
   }
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('id-ID', {
+    // Parse as local date without timezone conversion
+    const [year, month, day] = dateStr.split('-').map(Number)
+    const date = new Date(year, month - 1, day)
+    return date.toLocaleDateString('id-ID', {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
@@ -77,7 +103,7 @@ export default function Attendance() {
     })
   }
 
-  const todayLabel = formatDate(selectedDate + 'T12:00:00')
+  const todayLabel = formatDate(selectedDate)
 
   const activeCount = attendances.filter(a => !a.clock_out).length
   const completedCount = attendances.filter(a => a.clock_out).length
